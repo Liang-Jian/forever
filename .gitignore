@@ -1,0 +1,8 @@
+*.log
+*.yml
+*.pem
+*.mp4
+.vscode
+.idea
+target/*
+target/
