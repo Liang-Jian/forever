@@ -4,7 +4,7 @@ use chrono::{Local, NaiveTime, Timelike};
 use image::{GenericImageView, ImageOutputFormat, Rgba, RgbaImage};
 use log::info;
 use rand::seq::SliceRandom;
-use rand::thread_rng;
+use rand::{thread_rng, Rng};
 use regex::Regex;
 use reqwest::Client;
 use rusttype::{point, Font, Scale};
@@ -15,6 +15,7 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader, Cursor, Seek, SeekFrom};
 use std::time::Duration;
 use tokio::time::sleep;
+use rand::distributions::Alphanumeric;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Page {
@@ -93,6 +94,16 @@ pub fn need_sleep_time(args: &[String; 2]) -> u64 {
     let seconds2 = time2.num_seconds_from_midnight();
     let difference = (seconds2 - seconds1) as u64;
     difference
+}
+
+fn generate_random_string(length: usize) -> String {
+    // 创建一个线程安全的随机数生成器
+    let mut rng = thread_rng();
+    // 生成指定长度的随机字符串
+    (0..length)
+        .map(|_| rng.sample(Alphanumeric))
+        .map(char::from)
+        .collect()
 }
 
 // 获取初始文件seek
@@ -322,7 +333,7 @@ impl EwConf {
 
             for e in esl_chunk {
                 let d = json!({
-                    "sid": "19940502",
+                    "sid": generate_random_string(12),
                     "esl_id": e,
                     "priority": 1,
                     "back_url": self.back_url,
