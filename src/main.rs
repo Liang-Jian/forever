@@ -66,7 +66,7 @@ struct EwConf {
     pub starttime: Option<NaiveTime>, // kaishi shijian
     #[serde(skip_serializing, skip_deserializing)]
     fileseek: u64, // file seek
-    pub only: Option<bool>,     // 自定义开关。
+    
     pub template: Option<String>, // 自定义更细模版
 }
 
@@ -203,7 +203,6 @@ impl EwConf {
         let esl_id_list_ = get_esl_id_out(&conf_info.epd_wl, &conf_info.uc).unwrap();
         let start_fileseek =
             get_eslwlog_seek(&conf_info.ewlog).expect("fail to get file start fileseek");
-        let is_only = conf_info.only;
         let tpt = conf_info.template;
 
         Self {
@@ -218,7 +217,6 @@ impl EwConf {
             esl_id_list: esl_id_list_,
             starttime: None,
             fileseek: start_fileseek,
-            only: is_only, // 自定义开关。
             template: tpt, // 自定义更细模版
         }
     }
@@ -456,7 +454,7 @@ impl EwConf {
 async fn main() {
     log4rs::init_file("src/log4rs.yaml", Default::default()).unwrap();
     let mut contron = EwConf::new();
-    if contron.only.is_some() {
+    if contron.template.is_some() {
         info!("only is not empty");
         contron.up_tmp().await;
         return;
