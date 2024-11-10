@@ -3,6 +3,7 @@ use base64::encode;
 use chrono::{Local, NaiveTime, Timelike};
 use image::{GenericImageView, ImageOutputFormat, Rgba, RgbaImage};
 use log::info;
+use rand::distributions::Alphanumeric;
 use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
 use regex::Regex;
@@ -53,7 +54,6 @@ impl fmt::Display for ESLupdate {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct EwConf {
-    pub ew: String,             // ew home
     pub api: String,            // ewapi
     uc: String,                 // usercode
     pub back_url: String,       // back url
@@ -67,7 +67,7 @@ struct EwConf {
     pub starttime: Option<NaiveTime>, // kaishi shijian
     #[serde(skip_serializing, skip_deserializing)]
     fileseek: u64, // file seek
-    
+
     pub template: Option<String>, // 自定义更细模版
 }
 
@@ -116,7 +116,7 @@ pub fn get_eslwlog_seek(fp: &str) -> Result<u64> {
 
 /// 获取id
 pub fn get_esl_id_out(fp: &String, uc: &String) -> Result<Vec<String>> {
-    let file = File::open(fp).expect("esl_id is not found");
+    let file = File::open(fp).expect("epd_wl is not found,pls check");
     let reader = io::BufReader::new(file);
 
     let uc_suffix = format!("={}", uc);
@@ -133,7 +133,7 @@ pub fn get_esl_id_out(fp: &String, uc: &String) -> Result<Vec<String>> {
 /// 生成的模版为15m 大模版
 pub fn makepic(random_number: i32) -> String {
     // 读取 PNG 图片
-    let img = image::open("src/test.png").unwrap();
+    let img = image::open("src/test.png").expect("test.png need in you src path");
     // 获取图片的宽度和高度
     let (width, height) = img.dimensions();
     // 获取图片的 RGBA 像素数据
@@ -153,7 +153,7 @@ pub fn makepic(random_number: i32) -> String {
 
     // 加载字体文件
     let font_data = include_bytes!("SourceCodePro-Black.ttf") as &[u8];
-    let font = Font::try_from_bytes(font_data).expect("Error loading font");
+    let font = Font::try_from_bytes(font_data).expect("Error loading font file");
 
     // 随机生成一个数字
     // let random_number = rng.gen_range(10..100);
@@ -207,7 +207,7 @@ pub fn makepic(random_number: i32) -> String {
 
 impl EwConf {
     fn new() -> Self {
-        let _f = File::open("src/conf.txt").unwrap(); // 打开文件
+        let _f = File::open("src/conf.txt").expect("conf.txt is not  found"); // 打开文件
         let reader = BufReader::new(_f); // 创建一个带缓冲区的读取器
                                          // 将JSON数据解析为 EwConf 结构体
         let conf_info: EwConf = serde_json::from_reader(reader).unwrap();
@@ -217,7 +217,6 @@ impl EwConf {
         let tpt = conf_info.template;
 
         Self {
-            ew: conf_info.ew,
             api: conf_info.api,
             uc: conf_info.uc,
             back_url: conf_info.back_url,
@@ -279,7 +278,7 @@ impl EwConf {
 
         for e in &self.esl_id_list {
             let d = ESLupdate {
-                sid: "19890604".to_string(),
+                sid: generate_random_string(12),
                 priority: 10,
                 esl_id: e.to_string(),
                 back_url: self.back_url.clone(),
@@ -328,9 +327,7 @@ impl EwConf {
         // 将 esl_id_list 按每 200 个一组分块处理
         for esl_chunk in self.esl_id_list.chunks(200) {
             let mut batch = Vec::new();
-
             // 为当前块的每个 esl_id 创建 ESLupdate 并添加到 batch
-
             for e in esl_chunk {
                 let d = json!({
                     "sid": generate_random_string(12),
@@ -466,7 +463,7 @@ async fn main() {
     log4rs::init_file("src/log4rs.yaml", Default::default()).unwrap();
     let mut contron = EwConf::new();
     if contron.template.is_some() {
-        info!("only is not empty");
+        info!("update template file");
         contron.up_tmp().await;
         return;
     }
