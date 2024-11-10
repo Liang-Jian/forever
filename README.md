@@ -1,2 +1,2 @@
 # forever
-更新脚本
+foreverupdate

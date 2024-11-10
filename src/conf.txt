@@ -1,0 +1,9 @@
+{
+    "api":"10.11.107.88:9000",
+    "uc":"god.1",
+    "back_url":"http://10.11.107.88:9900",
+    "epd_wl":"/data/eslw/config/esl.txt",
+    "ewlog":"/data/eslw/log/eslworking.log",
+    "startprice": 1,
+    "limittime":["23:55","23:59"]
+}
