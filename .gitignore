@@ -2,6 +2,7 @@
 *.yml
 *.pem
 *.mp4
+*.txt
 .vscode
 .idea
 target/*
