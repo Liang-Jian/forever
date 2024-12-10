@@ -68,6 +68,7 @@ struct EwConf {
     #[serde(skip_serializing, skip_deserializing)]
     fileseek: u64, // 文件指针位置
     pub template: Option<String>, // 自定义更细模版文件夹
+    pub remote:Option<bool>  // 是否不查询日志
 }
 
 struct RunTime {
@@ -227,6 +228,7 @@ impl EwConf {
             starttime: None,
             fileseek: start_fileseek,
             template: tpt, // 自定义更细模版
+            remote: conf_info.remote  // 是否不查询日志
         }
     }
 
@@ -316,6 +318,16 @@ impl EwConf {
         );
         self.startprice += 1; // 价格增加
         Ok(())
+    }
+
+    pub async fn singlerun(mut self) {
+        info!("start only update");
+        loop {
+            let _ = self.send_update().await;
+            sleep(Duration::from_secs(300)).await;
+            let _ = self.send_update().await;
+            sleep(Duration::from_secs(300)).await;
+        }
     }
 
     // 下发更新
@@ -463,6 +475,9 @@ async fn main() {
         info!("update template file");
         contron.up_tmp().await;
         return;
+    }
+    if contron.remote.unwrap() {
+        contron.singlerun();
     }
     contron.send_update().await;
     sleep(Duration::from_secs(70)).await;
