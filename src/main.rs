@@ -16,7 +16,7 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader, Cursor, Seek, SeekFrom};
 use std::time::Duration;
 use tokio::time::sleep;
-use rand::distributions::Alphanumeric;
+
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Page {
@@ -64,11 +64,10 @@ struct EwConf {
     #[serde(skip_serializing, skip_deserializing)]
     pub esl_id_list: Vec<String>, // 要更新的epd
     #[serde(skip_serializing, skip_deserializing)]
-    pub starttime: Option<NaiveTime>, // kaishi shijian
+    pub starttime: Option<NaiveTime>, // 开始时间
     #[serde(skip_serializing, skip_deserializing)]
-    fileseek: u64, // file seek
-
-    pub template: Option<String>, // 自定义更细模版
+    fileseek: u64, // 文件指针位置
+    pub template: Option<String>, // 自定义更细模版文件夹
 }
 
 struct RunTime {
@@ -253,7 +252,7 @@ impl EwConf {
         }
     }
 
-    /// read txt file
+    /// 读取eslid问题
     pub fn get_esl_id(&mut self) -> Result<Vec<String>> {
         let file = File::open(&self.epd_wl).unwrap();
         let reader = io::BufReader::new(file);
@@ -306,13 +305,10 @@ impl EwConf {
             .map_err(|e| anyhow_ext::Error::from(e))?;
 
         if response.status().is_success() {
-            info!("Request was successful!");
-            // let response_text = response.text().await?;
-            // info!("Response: {}", response_text);
+            info!("update request successful!");
         } else {
-            info!("Request failed with status: {}", response.status());
+            info!("update request failed with status: {}", response.status());
         }
-
         self.starttime = Some(Local::now().time());
         info!(
             "Update pic send over and  price is {}; update start time = {:?} ",
@@ -414,7 +410,7 @@ impl EwConf {
 
                     if &release_esl.len() == &receive_esl.len() {
                         self.check_is_in(&esl_id, &receive_esl);
-                        if Self::is_during(&self.limittime[0], &self.limittime[1]) {
+                        if Self::is_during(&self.limittime[0], &self.limittime[1]) && self.fileseek > 1048576000 {
                             let finishtime = Local::now().time();
                             let td = RunTime {
                                 st: self.starttime.unwrap(),
@@ -451,8 +447,9 @@ impl EwConf {
                     }
                 }
             }
-
-            info!("recv:={}; finish={};", receive_esl.len(), release_esl.len());
+            if release_esl.len() > 0 {
+                info!("recv:={}; finish={};", receive_esl.len(), release_esl.len());
+            }
             sleep(Duration::from_secs(5)).await;
         }
     }

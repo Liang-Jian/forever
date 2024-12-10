@@ -1,0 +1,44 @@
+curl -s -X POST -d '{}' -H "Content-Type: application/json" -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/container/container_get
+
+curl -s -X POST -d '{"sid":"","name":"aoa-client"}' -H "Content-Type: application/json" -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/container/stop
+
+curl -s -X POST -d '{"sid":"","name":"aoa-client"}' -H "Content-Type: application/json" -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/container/start
+
+curl -s -X POST -d '{"sid":"","name":"aoa-client"}' -H "Content-Type: application/json" -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/container/restart
+
+curl -s -X POST -d '{}' -H "Content-Type: application/json" -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/images/status
+
+curl -s -X POST -d '{
+    "sid":"",
+    "name":"aoa-client",
+    "image":"aoa-client:1.1.0-rc.9",
+    "cpu": 0.3,
+    "mem": 300,
+    "disk": 0,
+    "device": [
+      "/dev/gpiochip0",
+      "/dev/gpiochip1",
+      "/dev/gpiochip2",
+      "/dev/gpiochip3",
+      "/dev/gpiochip4",
+      "/dev/ttyLP4",
+      "/dev/spidev3.0"
+    ],
+    "auth": {"uid":"ap", "pwd":"appasswd","registries":"10.11.173.231:5443"}
+}' -H 'Content-Type: application/json' -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/container/update
+
+curl -s -X POST -d '{
+    "sid":"",
+    "name":"fastfs",
+    "image":"fastfs:v1.2",
+    "cpu": 0.3,
+    "mem": 300,
+    "disk": 0,
+    "device": [
+    ],
+    "mode":"enabled"
+}' -H 'Content-Type: application/json' -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/container/run
+
+curl -s -X POST -d '{}' -H "Content-Type: application/json" -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/container/status
+
+curl -s -X POST -d '{"sid":"","name":"fastfs"}' -H "Content-Type: application/json" -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/container/rm

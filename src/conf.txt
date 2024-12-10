@@ -5,5 +5,6 @@
     "epd_wl":"/data/eslw/config/esl.txt",
     "ewlog":"/data/eslw/log/eslworking.log",
     "startprice": 1,
-    "limittime":["23:55","23:59"]
+    "limittime":["23:55","23:59"],
+    "remote": false
 }

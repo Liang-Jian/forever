@@ -1,0 +1,15 @@
+curl -s -X POST -d '{}' -H "Content-Type: application/json" -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/wifi/product_conf_test
+
+curl -s -X POST -d '{"ssid":"bruceiphone", "pwd":"88888886", "enabled":true}' -H "Content-Type: application/json" -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/wifi/client_adv
+
+curl -s -X POST -d '{"ssid":"ASUS_40_2G", "pwd":"12345678"}'  -H "Content-Type: application/json" -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/wifi/product_wifi_test
+
+curl -s -X POST -d '{}'  -H "Content-Type: application/json" -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/wifi/online_dev_get
+
+curl -s -X POST -d '{}'  -H "Content-Type: application/json" -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/wifi/product_conf_test
+
+curl -s -X POST -d '{}'  -H "Content-Type: application/json" -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/wifi/product_wifi_test
+
+curl -s -X POST -d '{}'  -H "Content-Type: application/json" -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/wifi/config_get
+
+curl -s -X POST -d '{}'  -H "Content-Type: application/json" -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/wifi/reboot

@@ -1,0 +1,27 @@
+curl -s -X POST -d '{}' -H "Content-Type: application/json" -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/ping
+
+curl -s -X POST -d '{}' -H "Content-Type: application/json" -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/ping
+
+curl -s -X POST -d '{}' -H 'Content-Type: application/json' -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/conf/vendor_get
+
+curl -s -X POST -d '{}' -H 'Content-Type: application/json' -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/conf/desc_get
+
+curl -s -X POST -d '{"desc":"fuck"}' -H 'Content-Type: application/json' -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/conf/desc
+
+curl -s -X POST -d '{}' -H 'Content-Type: application/json' -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/conf/server_get
+
+curl -s -X POST -d '{}' -H 'Content-Type: application/json' -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/conf/net_get
+
+curl -s -X POST -d '{}' -H 'Content-Type: application/json' -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/conf/web_get
+
+curl -s -X POST -d '{}' -H 'Content-Type: application/json' -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/conf/wifi_get
+
+curl -s -X POST -d '{}' -H 'Content-Type: application/json' -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/conf/timezone_get
+
+curl -s -X POST -d '{}' -H 'Content-Type: application/json' -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/conf/internal_dhcp_get
+
+curl -s -X POST -d '{}' -H 'Content-Type: application/json' -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/conf/dhcp_options_get
+
+curl -s -X POST -d '{"v":"88", "c":"red","t":60,"r":true}' -H 'Content-Type: application/json' -k https://10.11.173.231:9900/api/cluster/devices/3e:ad:54:e1:13:4e/rpc/sysctrl/hw/led
+
+
