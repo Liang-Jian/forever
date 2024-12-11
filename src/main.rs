@@ -1,4 +1,4 @@
-use anyhow_ext::Result;
+use anyhow_ext::{anyhow, Result,Context};
 use base64::encode;
 use chrono::{Local, NaiveTime, Timelike};
 use image::{GenericImageView, ImageOutputFormat, Rgba, RgbaImage};
@@ -10,12 +10,36 @@ use regex::Regex;
 use reqwest::Client;
 use rusttype::{point, Font, Scale};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
+use tokio::spawn;
+use std::collections::HashMap;
 use std::fmt::{self};
-use std::fs::File;
-use std::io::{self, BufRead, BufReader, Cursor, Seek, SeekFrom};
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, BufRead, BufReader, Cursor, Read, Seek, SeekFrom};
 use std::time::Duration;
 use tokio::time::sleep;
+
+
+#[derive(Serialize)]
+struct FlashLight {
+    colors: Vec<String>,
+    on_time: String,
+    led_rule: String, // 0是预置 1是接口
+    off_time: String,
+    flash_count: String,
+    sleep_time: String,
+    loop_count: String,
+    task_id: String,
+}
+
+#[derive(Serialize)]
+struct FlashControlData {
+    sid: String,
+    priority: u32,
+    back_url: String,
+    operation_type: String,
+    flash_light: FlashLight,
+}
 
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -52,8 +76,11 @@ impl fmt::Display for ESLupdate {
     }
 }
 
+
+
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct EwConf {
+pub struct EwConf {
     pub api: String,            // ewapi
     uc: String,                 // usercode
     pub back_url: String,       // back url
@@ -130,8 +157,22 @@ pub fn get_esl_id_out(fp: &String, uc: &String) -> Result<Vec<String>> {
     Ok(esl_list)
 }
 
+// 读取png转为图片
+pub fn make_self_pic(fpdir: String) -> Result<String> {
+    // 打开文件
+    let mut file = fs::File::open(fpdir)?;
+    // 读取文件内容到缓冲区
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)?;
+    // 将缓冲区编码为 Base64 字符串
+    let encoded = encode(&buffer);
+    // 打印或使用 encoded 字符串
+    println!("Base64 encoded PNG: {}", encoded);
+    Ok(encoded)
+}
+
 /// 生成的模版为15m 大模版
-pub fn makepic(random_number: i32) -> String {
+pub fn make_auto_pic(random_number: i32) -> String {
     // 读取 PNG 图片
     let img = image::open("src/test.png").expect("test.png need in you src path");
     // 获取图片的宽度和高度
@@ -207,13 +248,13 @@ pub fn makepic(random_number: i32) -> String {
 
 impl EwConf {
     fn new() -> Self {
-        let _f = File::open("src/conf.txt").expect("conf.txt is not  found"); // 打开文件
+        let _f = File::open("src/conf.txt").expect("conf.txt is not found"); // 打开文件
         let reader = BufReader::new(_f); // 创建一个带缓冲区的读取器
                                          // 将JSON数据解析为 EwConf 结构体
         let conf_info: EwConf = serde_json::from_reader(reader).unwrap();
         let esl_id_list_ = get_esl_id_out(&conf_info.epd_wl, &conf_info.uc).unwrap();
         let start_fileseek =
-            get_eslwlog_seek(&conf_info.ewlog).expect("fail to get file start fileseek");
+            get_eslwlog_seek(&conf_info.ewlog).expect("ew log path not found");
         let tpt = conf_info.template;
 
         Self {
@@ -227,7 +268,7 @@ impl EwConf {
             esl_id_list: esl_id_list_,
             starttime: None,
             fileseek: start_fileseek,
-            template: tpt, // 自定义更细模版
+            template: tpt, // 自定义更新模版
             remote: conf_info.remote  // 是否不查询日志
         }
     }
@@ -254,6 +295,23 @@ impl EwConf {
         }
     }
 
+    
+
+    //  获取eslid的尺寸用来的自定义模版，返回{"eslid":"templatename"}
+    pub async fn get_esl_id_size(&mut self, esl: &Vec<String>) -> Result<HashMap<String,String>>{ //127.0.0.1:9000/api3/esls/36-F0-BF-8B
+        let cli = Client::new();
+        let mut tmpresult: HashMap<String, String> = HashMap::new();
+        for ev in esl {
+            let data: HashMap<String, Value> = cli.get(format!("http://{a}/api3/esls/{e}", a=self.api, e = ev)).send().await?.json().await?;
+            println!("{}", serde_json::to_string_pretty(&data)?);
+            let picname = data.get("data").ok_or(anyhow!("can't find key data"))?.get("description").ok_or(anyhow!("no exist description"))?;
+            tmpresult.insert(String::from(ev), picname.to_string());
+            
+        }
+        info!("final hashmap ={}",serde_json::to_string(&tmpresult)?); 
+        Ok(tmpresult)
+    }
+
     /// 读取eslid问题
     pub fn get_esl_id(&mut self) -> Result<Vec<String>> {
         let file = File::open(&self.epd_wl).unwrap();
@@ -271,67 +329,103 @@ impl EwConf {
         Ok(esl_list)
     }
 
-    // 下发更新
-    pub async fn send_update(&mut self) -> Result<()> {
-        // bianli ziduan
-        let mut batch = Vec::new();
-        let pic_str = makepic(self.startprice);
-
-        for e in &self.esl_id_list {
-            let d = ESLupdate {
-                sid: generate_random_string(12),
-                priority: 10,
-                esl_id: e.to_string(),
-                back_url: self.back_url.clone(),
-                screen: Screen {
-                    name: e.to_string(),
-                    default_page: "normal".to_string(),
-                    default_page_id: String::from("0"),
-                    pages: vec![Page {
-                        id: 0,
-                        name: "normal".to_string(),
-                        image: pic_str.clone(),
-                    }],
-                },
-            };
-            batch.push(d);
-        }
-
-        let data = json!({"data":batch});
-        let client = Client::new();
-        let response: reqwest::Response = client
-            .put(&format!("http://{}/api3/{}/esls", self.api, self.uc))
+ 
+    async fn send_flash_control(&mut self, client: &Client, url: String, headers: reqwest::header::HeaderMap, data: FlashControlData) -> Result<()> {
+        let response = client
+            .put(&url)
+            .headers(headers.clone())
             .json(&data)
             .send()
             .await
-            .map_err(|e| anyhow_ext::Error::from(e))?;
-
+            .with_context(|| format!("发送 PUT 请求到 URL: {}", url))?;
+    
         if response.status().is_success() {
-            info!("update request successful!");
+            let response_text = response.text().await.with_context(|| "读取响应文本失败")?;
+            println!("请求成功，响应内容:\n{}", response_text);
         } else {
-            info!("update request failed with status: {}", response.status());
+            let status = response.status();
+            let response_text = response.text().await.unwrap_or_default();
+            println!(
+                "请求失败，状态码: {}, 响应内容: {}",
+                status, response_text
+            );
         }
-        self.starttime = Some(Local::now().time());
-        info!(
-            "Update pic send over and  price is {}; update start time = {:?} ",
-            self.startprice, &self.starttime
-        );
-        self.startprice += 1; // 价格增加
+    
+        Ok(())
+    }
+    
+    // 循环更新用
+    pub async fn singlerun(mut self) {
+        info!("start loop only update");
+        loop {
+            let _ = self.update().await;
+            sleep(Duration::from_secs(300)).await;
+            let _ = self.update().await;
+            sleep(Duration::from_secs(300)).await;
+        }
+    }
+
+    // 获取电池电量信息。并且美观输出
+    fn get_battery_info(&mut self, file_max_seek: u64, api_log_fp: &str) -> Result<()> {
+        // 获取 ESL ID 列表
+        let esl_ids = self.esl_id_list;
+    
+        // 打开 battery_fp 文件，以追加模式
+        let mut battery_file: File = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(self.template.unwrap())
+            .with_context(|| format!("can't open or create file : {}", self.template.unwrap()))?;
+    
+        info!("write battery start");
+    
+        // 预编译正则表达式
+        let re = Regex::new(r",query_type=53,battery=(.*?),sid=").expect("正则表达式编译失败");
+    
+        // 打开 api_log_fp 文件，以只读模式
+        let api_log_file = OpenOptions::new()
+            .read(true)
+            .open(api_log_fp)
+            .with_context(|| format!("无法打开文件: {}", api_log_fp))?;
+    
+        let mut reader = BufReader::new(api_log_file);
+        reader.seek(SeekFrom::Start(file_max_seek)).context("文件定位失败")?;
+    
+        // 逐行读取日志文件
+        let mut lines = reader.lines();
+    
+        while let Some(line) = lines.next() {
+            let line = line.context("读取日志文件失败")?;
+            // 检查是否包含特定关键词
+            if line.contains("category=api,action=prepare_ack,cmd=ESL_STATISTICS_QUERY_ACK") {
+                for esl in &esl_ids {
+                    if line.contains(&format!("esl_id={}", esl)) {
+                        if let Some(caps) = re.captures(&line) {
+                            let battery_power = caps.get(1)
+                                .map_or("0".to_string(), |m| m.as_str().to_string());
+    
+                            // 假设日期时间信息位于行首 23 个字符
+                            let dt = if line.len() >= 23 {
+                                &line[..23]
+                            } else {
+                                "none"
+                            };
+    
+                            // 记录电池信息到文件
+                            writeln!(battery_file, "{} - esl={};battery={}", dt, esl, battery_power).context("写入电池信息失败")?;
+                            // 日志记录
+                            info!("{} - esl={};battery={}", dt, esl, battery_power);
+                        }
+                    }
+                }
+            }
+        }
+        info!("write battery finish");
         Ok(())
     }
 
-    pub async fn singlerun(mut self) {
-        info!("start only update");
-        loop {
-            let _ = self.send_update().await;
-            sleep(Duration::from_secs(300)).await;
-            let _ = self.send_update().await;
-            sleep(Duration::from_secs(300)).await;
-        }
-    }
-
     // 下发更新
-    pub async fn up_tmp(&mut self) -> Result<()> {
+    pub async fn update(&mut self) -> Result<()> {
         // 将 esl_id_list 按每 200 个一组分块处理
         for esl_chunk in self.esl_id_list.chunks(200) {
             let mut batch = Vec::new();
@@ -367,7 +461,7 @@ impl EwConf {
             }
 
             // 每批发送完成后休眠一段时间，避免请求过快
-            sleep(Duration::from_millis(100)).await;
+            sleep(Duration::from_millis(200)).await;
         }
 
         // 记录开始时间和价格更新
@@ -435,9 +529,14 @@ impl EwConf {
                                 td,
                                 sleeptime + 30
                             );
+                            // spawn(async move {
+                                // 输出报告文件
+                            //     anyhow_ext::Ok(())
+                            // });
+                        
                             sleep(Duration::from_secs(sleeptime + 30)).await;
                             self.fileseek = 0; // waiting log change
-                            let _ = self.send_update().await;
+                            let _ = self.update().await;
                             break;
                         } else {
                             let finishtime = Local::now().time();
@@ -453,7 +552,7 @@ impl EwConf {
                                 "loop update finish; use second={:?}; file seek={}",
                                 td, self.fileseek
                             );
-                            self.send_update().await;
+                            self.update().await;
                             break;
                         }
                     }
@@ -473,13 +572,14 @@ async fn main() {
     let mut contron = EwConf::new();
     if contron.template.is_some() {
         info!("update template file");
-        contron.up_tmp().await;
+        contron.update().await;
         return;
     }
     if contron.remote.unwrap() {
         contron.singlerun();
     }
-    contron.send_update().await;
+    contron.update().await;
     sleep(Duration::from_secs(70)).await;
     contron.run().await;
 }
+
