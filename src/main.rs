@@ -11,11 +11,10 @@ use reqwest::Client;
 use rusttype::{point, Font, Scale};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tokio::spawn;
 use std::collections::HashMap;
 use std::fmt::{self};
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufRead, BufReader, Cursor, Read, Seek, SeekFrom};
+use std::io::{self, BufRead, BufReader, Cursor, Read, Seek, SeekFrom, Write};
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -95,7 +94,8 @@ pub struct EwConf {
     #[serde(skip_serializing, skip_deserializing)]
     fileseek: u64, // 文件指针位置
     pub template: Option<String>, // 自定义更细模版文件夹
-    pub remote:Option<bool>  // 是否不查询日志
+    pub auto:Option<bool>,  // 是否不查询日志
+    pub autotime: Option<u64>, // 定时更新
 }
 
 struct RunTime {
@@ -123,6 +123,7 @@ pub fn need_sleep_time(args: &[String; 2]) -> u64 {
     difference
 }
 
+ // 生成制定长度的随机字符串 ，用来sid
 fn generate_random_string(length: usize) -> String {
     // 创建一个线程安全的随机数生成器
     let mut rng = thread_rng();
@@ -257,6 +258,10 @@ impl EwConf {
             get_eslwlog_seek(&conf_info.ewlog).expect("ew log path not found");
         let tpt = conf_info.template;
 
+        if conf_info.auto.unwrap_or(false) && conf_info.autotime.is_none() {
+            anyhow!("配置错误：当 `auto` 为 true 时，`autotime` 不能为空");
+        }
+        let autotime = conf_info.autotime;
         Self {
             api: conf_info.api,
             uc: conf_info.uc,
@@ -269,7 +274,8 @@ impl EwConf {
             starttime: None,
             fileseek: start_fileseek,
             template: tpt, // 自定义更新模版
-            remote: conf_info.remote  // 是否不查询日志
+            auto: conf_info.auto,  // 间隔日志
+            autotime: autotime, // 间隔时间 s
         }
     }
 
@@ -360,72 +366,81 @@ impl EwConf {
         loop {
             let _ = self.update().await;
             sleep(Duration::from_secs(300)).await;
-            let _ = self.update().await;
-            sleep(Duration::from_secs(300)).await;
+
         }
     }
 
     // 获取电池电量信息。并且美观输出
-    fn get_battery_info(&mut self, file_max_seek: u64, api_log_fp: &str) -> Result<()> {
-        // 获取 ESL ID 列表
-        let esl_ids = self.esl_id_list;
+    // fn get_battery_info(&mut self, file_max_seek: u64, api_log_fp: &str) -> Result<()> {
+    //     // 获取 ESL ID 列表
+    //     let esl_ids = self.esl_id_list;
     
-        // 打开 battery_fp 文件，以追加模式
-        let mut battery_file: File = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(self.template.unwrap())
-            .with_context(|| format!("can't open or create file : {}", self.template.unwrap()))?;
+    //     // 打开 battery_fp 文件，以追加模式
+    //     let mut battery_file: File = OpenOptions::new()
+    //         .create(true)
+    //         .append(true)
+    //         .open(self.template.unwrap())
+    //         .with_context(|| format!("can't open or create file : {}", self.template.unwrap()))?;
     
-        info!("write battery start");
+    //     info!("write battery start");
     
-        // 预编译正则表达式
-        let re = Regex::new(r",query_type=53,battery=(.*?),sid=").expect("正则表达式编译失败");
+    //     // 预编译正则表达式
+    //     let re = Regex::new(r",query_type=53,battery=(.*?),sid=").expect("正则表达式编译失败");
     
-        // 打开 api_log_fp 文件，以只读模式
-        let api_log_file = OpenOptions::new()
-            .read(true)
-            .open(api_log_fp)
-            .with_context(|| format!("无法打开文件: {}", api_log_fp))?;
+    //     // 打开 api_log_fp 文件，以只读模式
+    //     let api_log_file = OpenOptions::new()
+    //         .read(true)
+    //         .open(api_log_fp)
+    //         .with_context(|| format!("无法打开文件: {}", api_log_fp))?;
     
-        let mut reader = BufReader::new(api_log_file);
-        reader.seek(SeekFrom::Start(file_max_seek)).context("文件定位失败")?;
+    //     let mut reader = BufReader::new(api_log_file);
+    //     reader.seek(SeekFrom::Start(file_max_seek)).context("文件定位失败")?;
     
-        // 逐行读取日志文件
-        let mut lines = reader.lines();
+    //     // 逐行读取日志文件
+    //     let mut lines = reader.lines();
     
-        while let Some(line) = lines.next() {
-            let line = line.context("读取日志文件失败")?;
-            // 检查是否包含特定关键词
-            if line.contains("category=api,action=prepare_ack,cmd=ESL_STATISTICS_QUERY_ACK") {
-                for esl in &esl_ids {
-                    if line.contains(&format!("esl_id={}", esl)) {
-                        if let Some(caps) = re.captures(&line) {
-                            let battery_power = caps.get(1)
-                                .map_or("0".to_string(), |m| m.as_str().to_string());
+    //     while let Some(line) = lines.next() {
+    //         let line = line.context("读取日志文件失败")?;
+    //         // 检查是否包含特定关键词
+    //         if line.contains("category=api,action=prepare_ack,cmd=ESL_STATISTICS_QUERY_ACK") {
+    //             for esl in &esl_ids {
+    //                 if line.contains(&format!("esl_id={}", esl)) {
+    //                     if let Some(caps) = re.captures(&line) {
+    //                         let battery_power = caps.get(1)
+    //                             .map_or("0".to_string(), |m| m.as_str().to_string());
     
-                            // 假设日期时间信息位于行首 23 个字符
-                            let dt = if line.len() >= 23 {
-                                &line[..23]
-                            } else {
-                                "none"
-                            };
+    //                         // 假设日期时间信息位于行首 23 个字符
+    //                         let dt = if line.len() >= 23 {
+    //                             &line[..23]
+    //                         } else {
+    //                             "none"
+    //                         };
     
-                            // 记录电池信息到文件
-                            writeln!(battery_file, "{} - esl={};battery={}", dt, esl, battery_power).context("写入电池信息失败")?;
-                            // 日志记录
-                            info!("{} - esl={};battery={}", dt, esl, battery_power);
-                        }
-                    }
-                }
-            }
+    //                         // 记录电池信息到文件
+    //                         writeln!(battery_file, "{} - esl={};battery={}", dt, esl, battery_power).context("写入电池信息失败")?;
+    //                         // 日志记录
+    //                         info!("{} - esl={};battery={}", dt, esl, battery_power);
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     info!("write battery finish");
+    //     Ok(())
+    // }
+
+    pub async fn update(&mut self) -> Result<()> {
+        if self.template.is_some() {
+            self.update_tpl().await?;
         }
-        info!("write battery finish");
+        else {
+            self.update_pic().await?;
+        }
         Ok(())
     }
 
     // 下发更新
-    pub async fn update(&mut self) -> Result<()> {
+    async fn update_tpl(&mut self) -> Result<()> {
         // 将 esl_id_list 按每 200 个一组分块处理
         for esl_chunk in self.esl_id_list.chunks(200) {
             let mut batch = Vec::new();
@@ -462,6 +477,64 @@ impl EwConf {
 
             // 每批发送完成后休眠一段时间，避免请求过快
             sleep(Duration::from_millis(200)).await;
+        }
+
+        // 记录开始时间和价格更新
+        self.starttime = Some(Local::now().time());
+        info!(
+            "Update  send over and price is {}; update start time = {:?} ",
+            self.startprice, &self.starttime
+        );
+        self.startprice += 1; // 价格增加
+        Ok(())
+    }
+
+    // 下发更新
+    async fn update_pic(&mut self) -> Result<()> {
+        // 将按每 30 个一组分块处理，要不太快
+        let sid_info = generate_random_string(12);
+        let img_data = make_auto_pic(self.startprice);
+        for esl_chunk in self.esl_id_list.chunks(30) {
+            let mut batch = Vec::new();
+            for e in esl_chunk {
+                let d = json!({
+                    "sid": sid_info,
+                    "esl_id": e,
+                    "priority": 10,
+                    "back_url": self.back_url,
+                    "screen": {
+                        "name": e,
+                        "default_page": "normal",
+                        "default_page_id": "0",
+                        "pages": [
+                            {
+                                "id": 0,
+                                "name": "normal",
+                                "image": img_data
+                            },
+                        ]
+                    },
+                });
+                batch.push(d);
+            }
+            // 构建请求数据
+            let data = json!({ "data": batch });
+            let client = Client::new();
+            let response: reqwest::Response = client
+                .put(&format!("http://{}/api3/{}/esls", self.api, self.uc))
+                .json(&data)
+                .send()
+                .await
+                .map_err(|e| anyhow_ext::Error::from(e))?;
+
+            // 检查请求是否成功
+            if response.status().is_success() {
+                info!("Request was successful for a batch of 200!");
+            } else {
+                info!("Request failed with status: {}", response.status());
+            }
+            // 每批发送完成后休眠一段时间，避免请求过快
+            sleep(Duration::from_millis(400)).await;
         }
 
         // 记录开始时间和价格更新
@@ -570,13 +643,8 @@ impl EwConf {
 async fn main() {
     log4rs::init_file("src/log4rs.yaml", Default::default()).unwrap();
     let mut contron = EwConf::new();
-    if contron.template.is_some() {
-        info!("update template file");
-        contron.update().await;
-        return;
-    }
-    if contron.remote.unwrap() {
-        contron.singlerun();
+    if contron.auto.unwrap() {
+        contron.clone().singlerun().await;
     }
     contron.update().await;
     sleep(Duration::from_secs(70)).await;
