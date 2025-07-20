@@ -1,4 +1,4 @@
-use anyhow_ext::{anyhow, Context, Result};
+use anyhow_ext::{anyhow, bail, Context, Result};
 // use base64::encode;
 use base64::{engine::general_purpose::STANDARD, Engine};
 // use base64::Engine::encode;
@@ -173,85 +173,158 @@ pub fn make_self_pic(fpdir: String) -> Result<String> {
 }
 
 /// 生成的模版为15m 大模版
+// pub fn make_auto_pic(random_number: i32) -> String {
+//     // 读取 PNG 图片
+//     let img = image::open("src/test.png").expect("test.png need in you src path");
+//     // 获取图片的宽度和高度
+//     let (width, height) = img.dimensions();
+//     // 获取图片的 RGBA 像素数据
+//     let binding = img.to_rgba8();
+//     let mut pixels: Vec<_> = binding.pixels().collect();
+//     // 打乱像素数据
+//     let mut rng = thread_rng();
+//     pixels.shuffle(&mut rng);
+//     // 创建一个新的 RGBA 图像
+//     let mut output_image = RgbaImage::new(width, height);
+//     // 将打乱的像素重新填充到图像中
+//     for (i, pixel) in pixels.into_iter().enumerate() {
+//         let x = (i as u32) % width;
+//         let y = (i as u32) / width;
+//         output_image.put_pixel(x, y, *pixel);
+//     }
+
+//     // 加载字体文件
+//     let font_data = include_bytes!("SourceCodePro-Black.ttf") as &[u8];
+//     let font = Font::try_from_bytes(font_data).expect("Error loading font file");
+
+//     // 随机生成一个数字
+//     // let random_number = rng.gen_range(10..100);
+
+//     // 设置字体大小和位置
+//     let scale = Scale {
+//         x: 1200.0,
+//         y: 1200.0,
+//     };
+//     let v_metrics = font.v_metrics(scale);
+//     let text = random_number.to_string();
+//     let glyphs: Vec<_> = font
+//         .layout(&text, scale, point(0.0, v_metrics.ascent))
+//         .collect();
+
+//     // 计算文本绘制的起始位置
+//     let glyph_width = glyphs.iter().rev().next().unwrap().position().x as u32;
+//     let glyph_x_offset = (width - glyph_width) / 2;
+//     let glyph_y_offset = (height - v_metrics.ascent as u32) / 2;
+
+//     // 绘制随机数字到图像中间
+//     for glyph in glyphs {
+//         if let Some(bounding_box) = glyph.pixel_bounding_box() {
+//             glyph.draw(|x, y, v| {
+//                 let x = x + glyph_x_offset + bounding_box.min.x as u32;
+//                 let y = y + glyph_y_offset as u32;
+//                 let value = (v * 255.0) as u8;
+//                 output_image.put_pixel(x, y, Rgba([255, 255, 255, value])); // 白色字体
+//             });
+//         }
+//     }
+
+//     // 将图像保存到内存中
+//     let mut buffer = Cursor::new(Vec::new());
+//     output_image
+//         .write_to(&mut buffer, ImageOutputFormat::Png)
+//         .unwrap();
+
+//     // 获取图像数据的字节数组
+//     let image_data = buffer.into_inner();
+//     // 将图像字节数组编码为 Base64 字符串
+//     let base64_string = STANDARD.encode(&image_data);
+//     // 打印出 Base64 编码的字符串
+//     // println!("Base64 Encoded Image: {}", base64_string);
+//     // 保存打乱后的图片并包含随机数字
+//     info!("make pic finish");
+//     base64_string
+// }
+
+
 pub fn make_auto_pic(random_number: i32) -> String {
-    // 读取 PNG 图片
+    // 读取 PNG 并打乱像素（保持不变）
     let img = image::open("src/test.png").expect("test.png need in you src path");
-    // 获取图片的宽度和高度
     let (width, height) = img.dimensions();
-    // 获取图片的 RGBA 像素数据
     let binding = img.to_rgba8();
     let mut pixels: Vec<_> = binding.pixels().collect();
-    // 打乱像素数据
     let mut rng = thread_rng();
     pixels.shuffle(&mut rng);
-    // 创建一个新的 RGBA 图像
+
+    // 新建输出图，先把打乱的像素铺上去
     let mut output_image = RgbaImage::new(width, height);
-    // 将打乱的像素重新填充到图像中
-    for (i, pixel) in pixels.into_iter().enumerate() {
+    for (i, pix) in pixels.into_iter().enumerate() {
         let x = (i as u32) % width;
         let y = (i as u32) / width;
-        output_image.put_pixel(x, y, *pixel);
+        output_image.put_pixel(x, y, *pix);
     }
 
-    // 加载字体文件
+    // 加载字体
     let font_data = include_bytes!("SourceCodePro-Black.ttf") as &[u8];
-    let font = Font::try_from_bytes(font_data).expect("Error loading font file");
+    let font = Font::try_from_bytes(font_data).expect("Error loading font");
 
-    // 随机生成一个数字
-    // let random_number = rng.gen_range(10..100);
-
-    // 设置字体大小和位置
-    let scale = Scale {
-        x: 1200.0,
-        y: 1200.0,
-    };
-    let v_metrics = font.v_metrics(scale);
+    // 将数字拆成字符
     let text = random_number.to_string();
-    let glyphs: Vec<_> = font
-        .layout(&text, scale, point(0.0, v_metrics.ascent))
-        .collect();
+    let chars: Vec<char> = text.chars().collect();
+    let n = chars.len() as u32;
 
-    // 计算文本绘制的起始位置
-    let glyph_width = glyphs.iter().rev().next().unwrap().position().x as u32;
-    let glyph_x_offset = (width - glyph_width) / 2;
-    let glyph_y_offset = (height - v_metrics.ascent as u32) / 2;
+    // 计算每个字符占据的“格子”宽度
+    let cell_w = width / n;
 
-    // 绘制随机数字到图像中间
-    for glyph in glyphs {
-        if let Some(bounding_box) = glyph.pixel_bounding_box() {
-            glyph.draw(|x, y, v| {
-                let x = x + glyph_x_offset + bounding_box.min.x as u32;
-                let y = y + glyph_y_offset as u32;
-                let value = (v * 255.0) as u8;
-                output_image.put_pixel(x, y, Rgba([255, 255, 255, value])); // 白色字体
-            });
+    // 字体大小：让字高占图片高度的 80%
+    let scale_value = height as f32 * 0.8;
+    let scale = Scale { x: scale_value, y: scale_value };
+
+    // 垂直居中时的 baseline（v_metrics.ascent 是从 baseline 到字顶）
+    let v_metrics = font.v_metrics(scale);
+    let y_offset = ((height as f32 - (v_metrics.ascent - v_metrics.descent)) / 2.0) as u32;
+
+    // 对每个字符，单独 layout 并绘制
+    for (i, &c) in chars.iter().enumerate() {
+        // layout 出单个字符的 glyph
+        let glyphs: Vec<_> = font
+            .layout(&c.to_string(), scale, point(0.0, v_metrics.ascent))
+            .collect();
+        // 取第一个 glyph（对于单字符 layout 就是它）
+        if let Some(glyph) = glyphs.first() {
+            if let Some(bb) = glyph.pixel_bounding_box() {
+                // 计算此字符在整张图中的 x 起点：让它在第 i 格中水平居中
+                let glyph_w = bb.width() as u32;
+                let x0 = i as u32 * cell_w + (cell_w.saturating_sub(glyph_w)) / 2;
+                // 绘制：用纯白、全不透明
+                glyph.draw(|gx, gy, v| {
+                    if  v > 0.5 {
+                    let px = x0 + gx;
+                    let py = y_offset + gy;
+                    if px < width && py < height {
+                        output_image.put_pixel(px, py, Rgba([255, 255, 255, 255]));
+                    }
+                    }
+
+                });
+            }
         }
     }
 
-    // 将图像保存到内存中
+    // 导出 Base64
     let mut buffer = Cursor::new(Vec::new());
     output_image
         .write_to(&mut buffer, ImageOutputFormat::Png)
         .unwrap();
-
-    // 获取图像数据的字节数组
     let image_data = buffer.into_inner();
-    // 将图像字节数组编码为 Base64 字符串
-    let base64_string = STANDARD.encode(&image_data);
-    // 打印出 Base64 编码的字符串
-    // println!("Base64 Encoded Image: {}", base64_string);
-    // 保存打乱后的图片并包含随机数字
-    // output_image.save("output_image_with_number.png").unwrap();
-    // println!("图片处理完成并保存为 output_image_with_number.png");
     info!("make pic finish");
-    base64_string
+    output_image.save("output_image_with_number.png").unwrap();
+    STANDARD.encode(&image_data)
 }
 
 impl EwConf {
     fn new() -> Self {
         let _f = File::open("src/conf.txt").expect("conf.txt is not found"); // 打开文件
         let reader = BufReader::new(_f); // 创建一个带缓冲区的读取器
-                                         // 将JSON数据解析为 EwConf 结构体
         let conf_info: EwConf = serde_json::from_reader(reader).unwrap();
         let esl_id_list_ = get_esl_id_out(&conf_info.epd_wl, &conf_info.uc).unwrap();
         let start_fileseek = get_eslwlog_seek(&conf_info.ewlog).expect("ew log path not found");
@@ -370,7 +443,7 @@ impl EwConf {
         info!("start loop only update");
         loop {
             let _ = self.update().await;
-            sleep(Duration::from_secs(300)).await;
+            sleep(Duration::from_secs(self.autotime.unwrap())).await;
         }
     }
 
