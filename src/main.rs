@@ -1,5 +1,7 @@
-use anyhow_ext::{anyhow, Result,Context};
-use base64::encode;
+use anyhow_ext::{anyhow, Context, Result};
+// use base64::encode;
+use base64::{engine::general_purpose::STANDARD, Engine};
+// use base64::Engine::encode;
 use chrono::{Local, NaiveTime, Timelike};
 use image::{GenericImageView, ImageOutputFormat, Rgba, RgbaImage};
 use log::info;
@@ -13,12 +15,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fmt::{self};
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufRead, BufReader, Cursor, Read, Seek, SeekFrom, Write};
+use std::fs::{self, File};
+use std::io::{self, BufRead, BufReader, Cursor, Read, Seek, SeekFrom};
 use std::time::Duration;
 use tokio::time::sleep;
 
-
+#[allow(dead_code)]
 #[derive(Serialize)]
 struct FlashLight {
     colors: Vec<String>,
@@ -31,6 +33,7 @@ struct FlashLight {
     task_id: String,
 }
 
+#[allow(dead_code)]
 #[derive(Serialize)]
 struct FlashControlData {
     sid: String,
@@ -40,7 +43,7 @@ struct FlashControlData {
     flash_light: FlashLight,
 }
 
-
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Page {
     id: u32,
@@ -55,7 +58,7 @@ struct Screen {
     default_page_id: String,
     pages: Vec<Page>,
 }
-
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct ESLupdate {
     sid: String,
@@ -75,9 +78,6 @@ impl fmt::Display for ESLupdate {
     }
 }
 
-
-
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EwConf {
     pub api: String,            // ewapi
@@ -94,8 +94,8 @@ pub struct EwConf {
     #[serde(skip_serializing, skip_deserializing)]
     fileseek: u64, // 文件指针位置
     pub template: Option<String>, // 自定义更细模版文件夹
-    pub auto:Option<bool>,  // 是否不查询日志
-    pub autotime: Option<u64>, // 定时更新
+    pub auto: Option<bool>,     // 是否不查询日志
+    pub autotime: Option<u64>,  // 定时更新
 }
 
 struct RunTime {
@@ -123,7 +123,7 @@ pub fn need_sleep_time(args: &[String; 2]) -> u64 {
     difference
 }
 
- // 生成制定长度的随机字符串 ，用来sid
+// 生成制定长度的随机字符串 ，用来sid
 fn generate_random_string(length: usize) -> String {
     // 创建一个线程安全的随机数生成器
     let mut rng = thread_rng();
@@ -166,7 +166,7 @@ pub fn make_self_pic(fpdir: String) -> Result<String> {
     let mut buffer = Vec::new();
     file.read_to_end(&mut buffer)?;
     // 将缓冲区编码为 Base64 字符串
-    let encoded = encode(&buffer);
+    let encoded = STANDARD.encode(&buffer);
     // 打印或使用 encoded 字符串
     println!("Base64 encoded PNG: {}", encoded);
     Ok(encoded)
@@ -237,7 +237,7 @@ pub fn make_auto_pic(random_number: i32) -> String {
     // 获取图像数据的字节数组
     let image_data = buffer.into_inner();
     // 将图像字节数组编码为 Base64 字符串
-    let base64_string = encode(&image_data);
+    let base64_string = STANDARD.encode(&image_data);
     // 打印出 Base64 编码的字符串
     // println!("Base64 Encoded Image: {}", base64_string);
     // 保存打乱后的图片并包含随机数字
@@ -254,8 +254,7 @@ impl EwConf {
                                          // 将JSON数据解析为 EwConf 结构体
         let conf_info: EwConf = serde_json::from_reader(reader).unwrap();
         let esl_id_list_ = get_esl_id_out(&conf_info.epd_wl, &conf_info.uc).unwrap();
-        let start_fileseek =
-            get_eslwlog_seek(&conf_info.ewlog).expect("ew log path not found");
+        let start_fileseek = get_eslwlog_seek(&conf_info.ewlog).expect("ew log path not found");
         let tpt = conf_info.template;
 
         if conf_info.auto.unwrap_or(false) && conf_info.autotime.is_none() {
@@ -273,9 +272,9 @@ impl EwConf {
             esl_id_list: esl_id_list_,
             starttime: None,
             fileseek: start_fileseek,
-            template: tpt, // 自定义更新模版
-            auto: conf_info.auto,  // 间隔日志
-            autotime: autotime, // 间隔时间 s
+            template: tpt,        // 自定义更新模版
+            auto: conf_info.auto, // 间隔日志
+            autotime: autotime,   // 间隔时间 s
         }
     }
 
@@ -301,20 +300,27 @@ impl EwConf {
         }
     }
 
-    
-
     //  获取eslid的尺寸用来的自定义模版，返回{"eslid":"templatename"}
-    pub async fn get_esl_id_size(&mut self, esl: &Vec<String>) -> Result<HashMap<String,String>>{ //127.0.0.1:9000/api3/esls/36-F0-BF-8B
+    pub async fn get_esl_id_size(&mut self, esl: &Vec<String>) -> Result<HashMap<String, String>> {
+        //127.0.0.1:9000/api3/esls/36-F0-BF-8B
         let cli = Client::new();
         let mut tmpresult: HashMap<String, String> = HashMap::new();
         for ev in esl {
-            let data: HashMap<String, Value> = cli.get(format!("http://{a}/api3/esls/{e}", a=self.api, e = ev)).send().await?.json().await?;
+            let data: HashMap<String, Value> = cli
+                .get(format!("http://{a}/api3/esls/{e}", a = self.api, e = ev))
+                .send()
+                .await?
+                .json()
+                .await?;
             println!("{}", serde_json::to_string_pretty(&data)?);
-            let picname = data.get("data").ok_or(anyhow!("can't find key data"))?.get("description").ok_or(anyhow!("no exist description"))?;
+            let picname = data
+                .get("data")
+                .ok_or(anyhow!("can't find key data"))?
+                .get("description")
+                .ok_or(anyhow!("no exist description"))?;
             tmpresult.insert(String::from(ev), picname.to_string());
-            
         }
-        info!("final hashmap ={}",serde_json::to_string(&tmpresult)?); 
+        info!("final hashmap ={}", serde_json::to_string(&tmpresult)?);
         Ok(tmpresult)
     }
 
@@ -335,38 +341,36 @@ impl EwConf {
         Ok(esl_list)
     }
 
- 
-    async fn send_flash_control(&mut self, client: &Client, url: String, headers: reqwest::header::HeaderMap, data: FlashControlData) -> Result<()> {
-        let response = client
-            .put(&url)
-            .headers(headers.clone())
-            .json(&data)
-            .send()
-            .await
-            .with_context(|| format!("发送 PUT 请求到 URL: {}", url))?;
-    
-        if response.status().is_success() {
-            let response_text = response.text().await.with_context(|| "读取响应文本失败")?;
-            println!("请求成功，响应内容:\n{}", response_text);
-        } else {
-            let status = response.status();
-            let response_text = response.text().await.unwrap_or_default();
-            println!(
-                "请求失败，状态码: {}, 响应内容: {}",
-                status, response_text
-            );
-        }
-    
-        Ok(())
-    }
-    
+    // async fn send_flash_control(&mut self, client: &Client, url: String, headers: reqwest::header::HeaderMap, data: FlashControlData) -> Result<()> {
+    //     let response = client
+    //         .put(&url)
+    //         .headers(headers.clone())
+    //         .json(&data)
+    //         .send()
+    //         .await
+    //         .with_context(|| format!("发送 PUT 请求到 URL: {}", url))?;
+
+    //     if response.status().is_success() {
+    //         let response_text = response.text().await.with_context(|| "读取响应文本失败")?;
+    //         println!("请求成功，响应内容:\n{}", response_text);
+    //     } else {
+    //         let status = response.status();
+    //         let response_text = response.text().await.unwrap_or_default();
+    //         println!(
+    //             "请求失败，状态码: {}, 响应内容: {}",
+    //             status, response_text
+    //         );
+    //     }
+
+    //     Ok(())
+    // }
+
     // 循环更新用
     pub async fn singlerun(mut self) {
         info!("start loop only update");
         loop {
             let _ = self.update().await;
             sleep(Duration::from_secs(300)).await;
-
         }
     }
 
@@ -374,31 +378,31 @@ impl EwConf {
     // fn get_battery_info(&mut self, file_max_seek: u64, api_log_fp: &str) -> Result<()> {
     //     // 获取 ESL ID 列表
     //     let esl_ids = self.esl_id_list;
-    
+
     //     // 打开 battery_fp 文件，以追加模式
     //     let mut battery_file: File = OpenOptions::new()
     //         .create(true)
     //         .append(true)
     //         .open(self.template.unwrap())
     //         .with_context(|| format!("can't open or create file : {}", self.template.unwrap()))?;
-    
+
     //     info!("write battery start");
-    
+
     //     // 预编译正则表达式
     //     let re = Regex::new(r",query_type=53,battery=(.*?),sid=").expect("正则表达式编译失败");
-    
+
     //     // 打开 api_log_fp 文件，以只读模式
     //     let api_log_file = OpenOptions::new()
     //         .read(true)
     //         .open(api_log_fp)
     //         .with_context(|| format!("无法打开文件: {}", api_log_fp))?;
-    
+
     //     let mut reader = BufReader::new(api_log_file);
     //     reader.seek(SeekFrom::Start(file_max_seek)).context("文件定位失败")?;
-    
+
     //     // 逐行读取日志文件
     //     let mut lines = reader.lines();
-    
+
     //     while let Some(line) = lines.next() {
     //         let line = line.context("读取日志文件失败")?;
     //         // 检查是否包含特定关键词
@@ -408,14 +412,14 @@ impl EwConf {
     //                     if let Some(caps) = re.captures(&line) {
     //                         let battery_power = caps.get(1)
     //                             .map_or("0".to_string(), |m| m.as_str().to_string());
-    
+
     //                         // 假设日期时间信息位于行首 23 个字符
     //                         let dt = if line.len() >= 23 {
     //                             &line[..23]
     //                         } else {
     //                             "none"
     //                         };
-    
+
     //                         // 记录电池信息到文件
     //                         writeln!(battery_file, "{} - esl={};battery={}", dt, esl, battery_power).context("写入电池信息失败")?;
     //                         // 日志记录
@@ -432,8 +436,7 @@ impl EwConf {
     pub async fn update(&mut self) -> Result<()> {
         if self.template.is_some() {
             self.update_tpl().await?;
-        }
-        else {
+        } else {
             self.update_pic().await?;
         }
         Ok(())
@@ -589,7 +592,9 @@ impl EwConf {
 
                     if &release_esl.len() == &receive_esl.len() {
                         self.check_is_in(&esl_id, &receive_esl);
-                        if Self::is_during(&self.limittime[0], &self.limittime[1]) && self.fileseek > 1048576000 {
+                        if Self::is_during(&self.limittime[0], &self.limittime[1])
+                            && self.fileseek > 1048576000
+                        {
                             let finishtime = Local::now().time();
                             let td = RunTime {
                                 st: self.starttime.unwrap(),
@@ -603,10 +608,10 @@ impl EwConf {
                                 sleeptime + 30
                             );
                             // spawn(async move {
-                                // 输出报告文件
+                            // 输出报告文件
                             //     anyhow_ext::Ok(())
                             // });
-                        
+
                             sleep(Duration::from_secs(sleeptime + 30)).await;
                             self.fileseek = 0; // waiting log change
                             let _ = self.update().await;
@@ -625,7 +630,7 @@ impl EwConf {
                                 "loop update finish; use second={:?}; file seek={}",
                                 td, self.fileseek
                             );
-                            self.update().await;
+                            let _ = self.update().await;
                             break;
                         }
                     }
@@ -646,8 +651,7 @@ async fn main() {
     if contron.auto.unwrap() {
         contron.clone().singlerun().await;
     }
-    contron.update().await;
+    let _ = contron.update().await;
     sleep(Duration::from_secs(70)).await;
     contron.run().await;
 }
-
