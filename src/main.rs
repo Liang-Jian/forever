@@ -23,6 +23,9 @@ use tokio::time::sleep;
 
 const TTF_DATA: &[u8] = include_bytes!("SourceCodePro-Black.ttf");
 
+
+const TEST_PNG: &[u8] = include_bytes!("test.png");
+
 #[allow(dead_code)]
 #[derive(Serialize)]
 struct FlashLight {
@@ -178,7 +181,8 @@ pub fn make_self_pic(fpdir: String) -> Result<String> {
 /// 生成的模版为15m 大模版
 pub fn make_auto_pic(random_number: i32) -> String {
     // 读取 PNG 并打乱像素（保持不变）
-    let img = image::open("src/test.png").expect("test.png need in you src path");
+    // let img = image::open("src/test.png").expect("test.png need in you src path");
+    let img = image::load_from_memory(TEST_PNG).expect("load png file failed");
     let (width, height) = img.dimensions();
     let binding = img.to_rgba8();
     let mut pixels: Vec<_> = binding.pixels().collect();
