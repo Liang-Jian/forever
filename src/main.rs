@@ -1,3 +1,4 @@
+
 use anyhow_ext::{anyhow, bail, Context, Result};
 // use base64::encode;
 use base64::{engine::general_purpose::STANDARD, Engine};
@@ -19,6 +20,8 @@ use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader, Cursor, Read, Seek, SeekFrom};
 use std::time::Duration;
 use tokio::time::sleep;
+
+const TTF_DATA: &[u8] = include_bytes!("SourceCodePro-Black.ttf");
 
 #[allow(dead_code)]
 #[derive(Serialize)]
@@ -95,7 +98,7 @@ pub struct EwConf {
     fileseek: u64, // 文件指针位置
     pub template: Option<String>, // 自定义更细模版文件夹
     pub auto: Option<bool>,     // 是否不查询日志
-    pub autotime: Option<u64>,  // 定时更新
+    pub autotime: Option<u64>,  // 定时更新 s 
 }
 
 struct RunTime {
@@ -173,79 +176,6 @@ pub fn make_self_pic(fpdir: String) -> Result<String> {
 }
 
 /// 生成的模版为15m 大模版
-// pub fn make_auto_pic(random_number: i32) -> String {
-//     // 读取 PNG 图片
-//     let img = image::open("src/test.png").expect("test.png need in you src path");
-//     // 获取图片的宽度和高度
-//     let (width, height) = img.dimensions();
-//     // 获取图片的 RGBA 像素数据
-//     let binding = img.to_rgba8();
-//     let mut pixels: Vec<_> = binding.pixels().collect();
-//     // 打乱像素数据
-//     let mut rng = thread_rng();
-//     pixels.shuffle(&mut rng);
-//     // 创建一个新的 RGBA 图像
-//     let mut output_image = RgbaImage::new(width, height);
-//     // 将打乱的像素重新填充到图像中
-//     for (i, pixel) in pixels.into_iter().enumerate() {
-//         let x = (i as u32) % width;
-//         let y = (i as u32) / width;
-//         output_image.put_pixel(x, y, *pixel);
-//     }
-
-//     // 加载字体文件
-//     let font_data = include_bytes!("SourceCodePro-Black.ttf") as &[u8];
-//     let font = Font::try_from_bytes(font_data).expect("Error loading font file");
-
-//     // 随机生成一个数字
-//     // let random_number = rng.gen_range(10..100);
-
-//     // 设置字体大小和位置
-//     let scale = Scale {
-//         x: 1200.0,
-//         y: 1200.0,
-//     };
-//     let v_metrics = font.v_metrics(scale);
-//     let text = random_number.to_string();
-//     let glyphs: Vec<_> = font
-//         .layout(&text, scale, point(0.0, v_metrics.ascent))
-//         .collect();
-
-//     // 计算文本绘制的起始位置
-//     let glyph_width = glyphs.iter().rev().next().unwrap().position().x as u32;
-//     let glyph_x_offset = (width - glyph_width) / 2;
-//     let glyph_y_offset = (height - v_metrics.ascent as u32) / 2;
-
-//     // 绘制随机数字到图像中间
-//     for glyph in glyphs {
-//         if let Some(bounding_box) = glyph.pixel_bounding_box() {
-//             glyph.draw(|x, y, v| {
-//                 let x = x + glyph_x_offset + bounding_box.min.x as u32;
-//                 let y = y + glyph_y_offset as u32;
-//                 let value = (v * 255.0) as u8;
-//                 output_image.put_pixel(x, y, Rgba([255, 255, 255, value])); // 白色字体
-//             });
-//         }
-//     }
-
-//     // 将图像保存到内存中
-//     let mut buffer = Cursor::new(Vec::new());
-//     output_image
-//         .write_to(&mut buffer, ImageOutputFormat::Png)
-//         .unwrap();
-
-//     // 获取图像数据的字节数组
-//     let image_data = buffer.into_inner();
-//     // 将图像字节数组编码为 Base64 字符串
-//     let base64_string = STANDARD.encode(&image_data);
-//     // 打印出 Base64 编码的字符串
-//     // println!("Base64 Encoded Image: {}", base64_string);
-//     // 保存打乱后的图片并包含随机数字
-//     info!("make pic finish");
-//     base64_string
-// }
-
-
 pub fn make_auto_pic(random_number: i32) -> String {
     // 读取 PNG 并打乱像素（保持不变）
     let img = image::open("src/test.png").expect("test.png need in you src path");
@@ -264,8 +194,8 @@ pub fn make_auto_pic(random_number: i32) -> String {
     }
 
     // 加载字体
-    let font_data = include_bytes!("SourceCodePro-Black.ttf") as &[u8];
-    let font = Font::try_from_bytes(font_data).expect("Error loading font");
+    // let font_data = include_bytes!("SourceCodePro-Black.ttf") as &[u8];
+    let font = Font::try_from_bytes(TTF_DATA).expect("Error loading font");
 
     // 将数字拆成字符
     let text = random_number.to_string();
@@ -277,7 +207,10 @@ pub fn make_auto_pic(random_number: i32) -> String {
 
     // 字体大小：让字高占图片高度的 80%
     let scale_value = height as f32 * 0.8;
-    let scale = Scale { x: scale_value, y: scale_value };
+    let scale = Scale {
+        x: scale_value,
+        y: scale_value,
+    };
 
     // 垂直居中时的 baseline（v_metrics.ascent 是从 baseline 到字顶）
     let v_metrics = font.v_metrics(scale);
@@ -297,14 +230,13 @@ pub fn make_auto_pic(random_number: i32) -> String {
                 let x0 = i as u32 * cell_w + (cell_w.saturating_sub(glyph_w)) / 2;
                 // 绘制：用纯白、全不透明
                 glyph.draw(|gx, gy, v| {
-                    if  v > 0.5 {
-                    let px = x0 + gx;
-                    let py = y_offset + gy;
-                    if px < width && py < height {
-                        output_image.put_pixel(px, py, Rgba([255, 255, 255, 255]));
+                    if v > 0.5 {
+                        let px = x0 + gx;
+                        let py = y_offset + gy;
+                        if px < width && py < height {
+                            output_image.put_pixel(px, py, Rgba([255, 255, 255, 255]));
+                        }
                     }
-                    }
-
                 });
             }
         }
@@ -533,7 +465,6 @@ impl EwConf {
                 });
                 batch.push(d);
             }
-
             // 构建请求数据
             let data = json!({ "data": batch });
             let client = Client::new();
@@ -550,7 +481,6 @@ impl EwConf {
             } else {
                 info!("Request failed with status: {}", response.status());
             }
-
             // 每批发送完成后休眠一段时间，避免请求过快
             sleep(Duration::from_millis(200)).await;
         }
@@ -558,7 +488,7 @@ impl EwConf {
         // 记录开始时间和价格更新
         self.starttime = Some(Local::now().time());
         info!(
-            "Update  send over and price is {}; update start time = {:?} ",
+            "Update send over and price is {}; update start time = {:?} ",
             self.startprice, &self.starttime
         );
         self.startprice += 1; // 价格增加
@@ -567,10 +497,11 @@ impl EwConf {
 
     // 下发更新
     async fn update_pic(&mut self) -> Result<()> {
-        // 将按每 30 个一组分块处理，要不太快
+        // 将按每 15 个一组分块处理，要不太快
+        let count = 15 ; 
         let sid_info = generate_random_string(12);
         let img_data = make_auto_pic(self.startprice);
-        for esl_chunk in self.esl_id_list.chunks(30) {
+        for esl_chunk in self.esl_id_list.chunks(count) {
             let mut batch = Vec::new();
             for e in esl_chunk {
                 let d = json!({
@@ -602,15 +533,14 @@ impl EwConf {
                 .send()
                 .await
                 .map_err(|e| anyhow_ext::Error::from(e))?;
-
             // 检查请求是否成功
             if response.status().is_success() {
-                info!("Request was successful for a batch of 200!");
+                info!("Request was successful for a batch of {}!", count);
             } else {
                 info!("Request failed with status: {}", response.status());
             }
             // 每批发送完成后休眠一段时间，避免请求过快
-            sleep(Duration::from_millis(400)).await;
+            sleep(Duration::from_millis(300)).await;
         }
 
         // 记录开始时间和价格更新
@@ -721,8 +651,11 @@ impl EwConf {
 async fn main() {
     log4rs::init_file("src/log4rs.yaml", Default::default()).unwrap();
     let mut contron = EwConf::new();
-    if contron.auto.unwrap() {
-        contron.clone().singlerun().await;
+    if contron.auto.is_some() {
+        if contron.auto.unwrap() {
+            info!("auto run model, no check finish count");
+            contron.clone().singlerun().await;
+        }
     }
     let _ = contron.update().await;
     sleep(Duration::from_secs(70)).await;
