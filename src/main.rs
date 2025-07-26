@@ -1,5 +1,5 @@
 
-use anyhow_ext::{anyhow, bail, Context, Result};
+use anyhow_ext::{anyhow, Context, Result};
 // use base64::encode;
 use base64::{engine::general_purpose::STANDARD, Engine};
 // use base64::Engine::encode;
@@ -267,7 +267,7 @@ impl EwConf {
         let tpt = conf_info.template;
 
         if conf_info.auto.unwrap_or(false) && conf_info.autotime.is_none() {
-            anyhow!("配置错误：当 `auto` 为 true 时，`autotime` 不能为空");
+            panic!("配置错误：当 `auto` 为 true 时，`autotime` 不能为空");
         }
         let autotime = conf_info.autotime;
         Self {
